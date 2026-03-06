@@ -479,8 +479,10 @@ def run_ccr(task: str, provider: str, model: str, output_dir: Path, timeout: int
     stdout_file = output_dir / "ccr_stdout.txt"
     stderr_file = output_dir / "ccr_stderr.txt"
 
-    # Unset CLAUDECODE so claude doesn't refuse to run inside another session
+    # Unset CLAUDECODE so claude doesn't refuse to run inside another session.
+    # Set IS_SANDBOX=1 so --dangerously-skip-permissions works when running as root.
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    env["IS_SANDBOX"] = "1"
 
     print(f"  [CCR] Running task (timeout={timeout}s) ...")
     t_start = time.time()
