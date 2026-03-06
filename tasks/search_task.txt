@@ -1,0 +1,1 @@
+List a table to explain the different phrases used in Claude Code when executing or thinking.

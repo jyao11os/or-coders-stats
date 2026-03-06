@@ -1,0 +1,2 @@
+I have been using Claude Code Router (project cloned under ./claude-code-router) to launch Claude Code using any customized model on OpenRouter.
+Try to figure out how Claude Code will be calling OpenRouter APIs, and the specific IP address that would be making the calls if I run it here.
