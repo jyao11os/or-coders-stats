@@ -163,7 +163,9 @@ promotion_methods 常见值：
    ```
    aten op name 需要与 Step 1 中查到的 schema 名一致。
 
-### Step 5: accuracy 测试
+### Step 5: 编写 accuracy 测试
+
+**在 FlagGems 标准测试文件中添加测试用例**，不要写到 `/tmp` 或其他地方。
 
 根据算子类型，选择对应的测试文件：
 - 一元 pointwise → `tests/test_unary_pointwise_ops.py`
@@ -172,8 +174,65 @@ promotion_methods 常见值：
 - norm → `tests/test_norm_ops.py`
 - 其他 → `tests/test_special_ops.py`
 
-**先阅读对应测试文件**，了解现有测试的模式和使用的工具函数（如 `POINTWISE_SHAPES`, `FLOAT_DTYPES`, `to_reference`, `gems_assert_close`, `gems_assert_equal` 等），然后确认已有测试内容：
-- 正确性测试：`./FlagGems/experimental_tests/unit/im2col_test.py`
+**先阅读对应测试文件**，了解现有测试的模式和使用的工具函数（如 `POINTWISE_SHAPES`, `FLOAT_DTYPES`, `to_reference`, `gems_assert_close`, `gems_assert_equal` 等），然后在文件末尾追加新的测试函数。
+
+**一元 pointwise 测试模板**（参考 `test_accuracy_ceil` 和 `test_accuracy_ceil_`）：
+
+```python
+@pytest.mark.im2col
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_im2col(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp)
+
+    ref_out = torch.im2col(ref_inp)
+    with flag_gems.use_gems():
+        res_out = torch.im2col(inp)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.im2col_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_im2col_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp.clone())
+
+    ref_out = ref_inp.im2col_()
+    with flag_gems.use_gems():
+        res_out = inp.im2col_()
+
+    gems_assert_close(res_out, ref_out, dtype)
+```
+
+**二元 pointwise 测试模板**（参考 `test_accuracy_add` 等）：
+
+```python
+@pytest.mark.im2col
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_im2col(shape, dtype):
+    inp1 = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    inp2 = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp1 = to_reference(inp1)
+    ref_inp2 = to_reference(inp2)
+
+    ref_out = torch.im2col(ref_inp1, ref_inp2)
+    with flag_gems.use_gems():
+        res_out = torch.im2col(inp1, inp2)
+
+    gems_assert_close(res_out, ref_out, dtype)
+```
+
+**注意**：上面只是模板，你需要根据算子的实际接口和语义调整（输入数据生成方式、断言方式等）。对于精确运算（如 floor, round），应使用 `gems_assert_equal` 而非 `gems_assert_close`。
+
+具体测试用例内容**请直接使用以下实现中的测试用例**：
+`./FlagGems/experimental_tests/unit/im2col_test.py`
+
+### Step 6: 运行 accuracy 测试
 
 **必须在工作目录 `./FlagGems` 下运行**（pytest.ini 的 `pythonpath = src` 会自动让 Python 导入当前 worktree 的 `flag_gems`）。
 
@@ -181,7 +240,16 @@ promotion_methods 常见值：
 
 ```bash
 cd ./FlagGems
-CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest <test_file>.py -m im2col -vs --log-cli-level=DEBUG 2>&1
+CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest tests/<test_file>.py -m im2col -vs --log-cli-level=DEBUG 2>&1
+```
+
+例如：
+```bash
+# 一元 pointwise
+CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest tests/test_unary_pointwise_ops.py -m im2col -vs --log-cli-level=DEBUG
+
+# 二元 pointwise
+CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest tests/test_binary_pointwise_ops.py -m im2col -vs --log-cli-level=DEBUG
 ```
 
 **验证算子被调用**：在测试输出中检查是否出现了类似 `GEMS im2col` 的 DEBUG 日志。如果没有出现，说明你的算子没有被正确注册或调用，需要检查 Step 4 的注册步骤。
@@ -198,14 +266,35 @@ CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -c "
 3. 修复 `src/flag_gems/ops/im2col.py` 或测试代码
 4. 重新运行测试，直到所有测试通过
 
-### Step 6: 性能测试
+### Step 7: 编写 benchmark 并运行
 
-- 性能测试：`./FlagGems/experimental_tests/performance/im2col_test.py`
+**在 FlagGems 标准 benchmark 文件中添加 benchmark 条目**。
+
+根据算子类型，选择对应的 benchmark 文件：
+- 一元 pointwise → `benchmark/test_unary_pointwise_perf.py`
+- 二元 pointwise → `benchmark/test_binary_pointwise_perf.py`
+- reduction → `benchmark/test_reduction_perf.py`
+- 其他 → `benchmark/test_special_perf.py`
+
+**先阅读对应 benchmark 文件**，了解 `forward_operations` 列表的格式，然后将新算子追加到合适位置。
+
+**一元 pointwise benchmark 模板**（添加到 `forward_operations` 列表中）：
+```python
+("im2col", torch.im2col, FLOAT_DTYPES),
+```
+
+**二元 pointwise benchmark 模板**（添加到 `forward_operations` 列表中）：
+```python
+("im2col", torch.im2col, FLOAT_DTYPES),
+```
+
+具体测试用例内容**请直接使用以下实现中的测试用例**：
+`./FlagGems/experimental_tests/performance/im2col_test.py`
 
 运行 benchmark（同样必须在工作目录下）：
 ```bash
 cd ./FlagGems
-CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest experimental_tests/performance/<benchmark_file>.py -m im2col -vs 2>&1
+CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest benchmark/<benchmark_file>.py -m im2col -vs 2>&1
 ```
 
 **解析 benchmark 输出**：benchmark 输出格式为：
@@ -219,7 +308,7 @@ SUCCESS    ...
 
 请从输出中提取每一行 `SUCCESS` 的数据，按 dtype 分组记录到最终 JSON 中。
 
-### Step 7: 输出结果
+### Step 8: 输出结果
 
 **【必须】** 在所有步骤完成后，你**必须**输出以下 JSON 格式的最终结果。用 ````json` 和 ```` ` 代码块包裹，这是解析你输出的唯一方式，不输出 JSON 将导致结果丢失：
 
