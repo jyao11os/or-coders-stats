@@ -518,6 +518,9 @@ def run_ccr(task: str, provider: str, model: str, output_dir: Path, timeout: int
     response_file = output_dir / "ccr_response.txt"
     response_file.write_text(ccr_stats["response_text"])
 
+    exec_seq_file = output_dir / "ccr_full_execution_sequence.txt"
+    _write_ccr_execution_sequence(stdout_file, exec_seq_file)
+
     with open(trace_file, "w") as f:
         json.dump({
             "tool": "ccr",
@@ -609,6 +612,194 @@ def _parse_ccr_stdout(path: Path) -> dict:
     return result
 
 
+def _write_ccr_execution_sequence(stdout_path: Path, out_path: Path):
+    """
+    Parse CCR stream-json stdout and write a human-readable execution sequence.
+
+    Format per turn:
+      [ASSISTANT] free text
+      [TOOL CALL] ToolName(input json)
+      [TOOL RESULT] content   (is_error flag shown if true)
+      [RESULT] summary line
+    """
+    if not stdout_path.exists():
+        out_path.write_text("(no stdout captured)\n")
+        return
+
+    # Build a map from tool_use_id -> tool name for labelling results
+    id_to_name: dict = {}
+    lines_raw: list[str] = []
+    with open(stdout_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                lines_raw.append(line)
+
+    # First pass: collect tool names
+    for line in lines_raw:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if obj.get("type") == "assistant":
+            for block in obj.get("message", {}).get("content", []):
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    id_to_name[block.get("id", "")] = block.get("name", "?")
+
+    out_lines: list[str] = []
+
+    def _fmt_tool_result_content(content) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        parts.append(item.get("text", ""))
+                    elif item.get("type") == "tool_reference":
+                        parts.append(f"<tool_reference: {item.get('tool_name', '?')}>")
+                    else:
+                        parts.append(json.dumps(item))
+                else:
+                    parts.append(str(item))
+            return "\n".join(parts)
+        return json.dumps(content)
+
+    # Second pass: emit readable output
+    for line in lines_raw:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+
+        t = obj.get("type", "")
+
+        if t == "system":
+            prompt = obj.get("system", "")
+            if prompt:
+                out_lines.append(f"[SYSTEM PROMPT]\n{prompt}\n")
+
+        elif t == "assistant":
+            content = obj.get("message", {}).get("content", [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                bt = block.get("type")
+                if bt == "text":
+                    text = block.get("text", "").strip()
+                    if text:
+                        out_lines.append(f"[ASSISTANT]\n{text}\n")
+                elif bt == "tool_use":
+                    name = block.get("name", "?")
+                    inp = json.dumps(block.get("input", {}), ensure_ascii=False)
+                    out_lines.append(f"[TOOL CALL] {name}\n{inp}\n")
+
+        elif t == "user":
+            content = obj.get("message", {}).get("content", [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_result":
+                    tid = block.get("tool_use_id", "")
+                    tool_name = id_to_name.get(tid, tid)
+                    is_err = block.get("is_error", False)
+                    raw = _fmt_tool_result_content(block.get("content", ""))
+                    err_tag = " [ERROR]" if is_err else ""
+                    out_lines.append(f"[TOOL RESULT] {tool_name}{err_tag}\n{raw}\n")
+
+        elif t == "result":
+            usage = obj.get("usage", {})
+            turns = obj.get("num_turns", "?")
+            cost = obj.get("total_cost_usd", 0.0) or 0.0
+            inp = usage.get("input_tokens", 0)
+            out = usage.get("output_tokens", 0)
+            cr = usage.get("cache_read_input_tokens", 0)
+            cw = usage.get("cache_creation_input_tokens", 0)
+            out_lines.append(
+                f"[RESULT] turns={turns} cost=${cost:.6f} "
+                f"in={inp} out={out} cache_read={cr} cache_write={cw}\n"
+            )
+
+    out_path.write_text("\n".join(out_lines))
+
+
+def _write_opencode_execution_sequence(stdout_path: Path, out_path: Path):
+    """
+    Parse OpenCode --format json stdout and write a human-readable execution sequence.
+
+    Event types: step_start, step_finish, text, tool_use, error
+    """
+    if not stdout_path.exists():
+        out_path.write_text("(no stdout captured)\n")
+        return
+
+    out_lines: list[str] = []
+    step_num = 0
+
+    with open(stdout_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+
+            t = obj.get("type", "")
+            part = obj.get("part", {}) or {}
+
+            if t == "step_start":
+                step_num += 1
+                out_lines.append(f"[STEP {step_num} START]\n")
+
+            elif t == "step_finish":
+                reason = part.get("reason", "?")
+                tokens = part.get("tokens", {})
+                cost = part.get("cost", 0.0) or 0.0
+                inp = tokens.get("input", 0)
+                outt = tokens.get("output", 0)
+                cache = tokens.get("cache", {}) or {}
+                cr = cache.get("read", 0)
+                cw = cache.get("write", 0)
+                out_lines.append(
+                    f"[STEP {step_num} FINISH] reason={reason} cost=${cost:.6f} "
+                    f"in={inp} out={outt} cache_read={cr} cache_write={cw}\n"
+                )
+
+            elif t == "text":
+                text = part.get("text", "").strip()
+                if text:
+                    out_lines.append(f"[ASSISTANT]\n{text}\n")
+
+            elif t == "tool_use":
+                state = part.get("state", {}) or {}
+                tool = part.get("tool", "?")
+                inp_data = json.dumps(state.get("input", {}), ensure_ascii=False)
+                out_lines.append(f"[TOOL CALL] {tool}\n{inp_data}\n")
+                output = state.get("output")
+                if output is not None:
+                    is_err = state.get("status") == "error"
+                    err_tag = " [ERROR]" if is_err else ""
+                    out_lines.append(f"[TOOL RESULT] {tool}{err_tag}\n{output}\n")
+
+            elif t == "error":
+                err = obj.get("error", {})
+                msg = (
+                    (err.get("data") or {}).get("message")
+                    or err.get("message")
+                    or json.dumps(err)
+                )
+                out_lines.append(f"[ERROR] {msg}\n")
+
+    out_path.write_text("\n".join(out_lines))
+
+
 def _aggregate_tokens(records: list) -> dict:
     """Aggregate token counts from proxy-captured usage records.
 
@@ -694,6 +885,9 @@ def run_opencode(task: str, provider: str, model: str, output_dir: Path, timeout
     # Write human-readable response
     response_file = output_dir / "opencode_response.txt"
     response_file.write_text(response_text)
+
+    exec_seq_file = output_dir / "opencode_full_execution_sequence.txt"
+    _write_opencode_execution_sequence(stdout_file, exec_seq_file)
 
     # Save trace
     with open(trace_file, "w") as f:
