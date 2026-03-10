@@ -43,6 +43,20 @@ python bench.py --tool both --model openrouter/minimax/minimax-m2.5 --task tasks
 
 Results are saved to `results/<timestamp>_<tool>_<model>/`.
 
+## Benchmarking all models at once
+
+`run_all_models.sh` reads every model from the `openrouter` provider in `~/.claude-code-router/config.json` and runs `bench.py` against each one sequentially.
+
+```bash
+./run_all_models.sh <task_file> <timeout_seconds> <tool: ccr|opencode|both>
+
+# Examples
+./run_all_models.sh tasks/example_task.txt 300 ccr
+./run_all_models.sh tasks/example_task.txt 600 both
+```
+
+A `[i/total]` header is printed before each run. Failures are caught per-model so the loop always continues. A summary of any failed models is printed at the end.
+
 ## Regenerating execution sequences
 
 To regenerate `*_full_execution_sequence.txt` for earlier results without re-running the agent:
