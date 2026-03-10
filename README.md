@@ -68,3 +68,4 @@ Some models require transformer overrides in `~/.claude-code-router/config.json`
     "use": ["openrouter", ["customparams", {"reasoning": {"enabled": true}}]]
   }
   ```
+  **Note: MiniMax M2.5 does not work as a Claude Code backend.** Despite accepting the request, it outputs tool calls in an XML format (`<invoke name="...">`) instead of the OpenAI JSON `tool_calls` format. Claude Code cannot parse these, so no tools are ever executed and the agent stops after one turn. This is a model-side issue with no CCR-level workaround.
