@@ -62,9 +62,9 @@ python gen_execution_sequence.py results/
 
 Some models require transformer overrides in `~/.claude-code-router/config.json`. Known cases:
 
-- **MiniMax M2.5** — requires reasoning to be enabled (not disabled). Add to the provider's `transformer` block:
+- **MiniMax M2.5** — requires reasoning to be enabled. The `customparams` transformer is used to force `reasoning.enabled = true` after the Anthropic→OpenAI body conversion (the `reasoning` transformer acts too early and doesn't work here). Add to the provider's `transformer` block:
   ```json
   "minimax/minimax-m2.5": {
-    "use": ["openrouter", ["reasoning", {"enable": true}]]
+    "use": ["openrouter", ["customparams", {"reasoning": {"enabled": true}}]]
   }
   ```
