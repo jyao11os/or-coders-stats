@@ -4,7 +4,7 @@
 
 ## 任务信息
 
-- **算子名称**: leaky_relu
+- **算子名称**: soft_margin_loss
 - **GPU ID**: 0
 - **工作目录**: ./FlagGems (这是一个 git worktree)
 - **Python 路径**: /root/miniconda3/envs/flagscale-inference/bin/python
@@ -58,12 +58,12 @@ pytest.ini                        # 配置 pythonpath = src，自动导入 workt
 
 ### Step 1: 了解算子语义
 
-运行以下命令了解 `leaky_relu` 的 PyTorch 接口：
+运行以下命令了解 `soft_margin_loss` 的 PyTorch 接口：
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -c "
 import torch
-for module_path in ['torch.leaky_relu', 'torch.nn.functional.leaky_relu']:
+for module_path in ['torch.soft_margin_loss', 'torch.nn.functional.soft_margin_loss']:
     try:
         fn = eval(module_path)
         help(fn)
@@ -79,7 +79,7 @@ for module_path in ['torch.leaky_relu', 'torch.nn.functional.leaky_relu']:
 CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -c "
 import torch
 for op in dir(torch.ops.aten):
-    if 'leaky_relu' in op.lower():
+    if 'soft_margin_loss' in op.lower():
         fn = getattr(torch.ops.aten, op)
         if hasattr(fn, 'default'):
             print(f'{op}: {fn.default._schema}')
@@ -142,7 +142,7 @@ promotion_methods 常见值：
 
 ### Step 3: 实现算子代码
 
-在 `src/flag_gems/ops/leaky_relu.py` 创建算子实现。
+在 `src/flag_gems/ops/soft_margin_loss.py` 创建算子实现。
 
 **要求：**
 - 遵循已有算子的代码风格
@@ -173,7 +173,7 @@ promotion_methods 常见值：
 - 其他 → `tests/test_special_ops.py`
 
 **先阅读对应测试文件**，了解现有测试的模式和使用的工具函数（如 `POINTWISE_SHAPES`, `FLOAT_DTYPES`, `to_reference`, `gems_assert_close`, `gems_assert_equal` 等），然后确认已有测试内容：
-- 正确性测试：`./FlagGems/experimental_tests/unit/leaky_relu_test.py`
+- 正确性测试：`./FlagGems/experimental_tests/unit/soft_margin_loss_test.py`
 
 **必须在工作目录 `./FlagGems` 下运行**（pytest.ini 的 `pythonpath = src` 会自动让 Python 导入当前 worktree 的 `flag_gems`）。
 
@@ -181,10 +181,10 @@ promotion_methods 常见值：
 
 ```bash
 cd ./FlagGems
-CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest <test_file>.py -m leaky_relu -vs --log-cli-level=DEBUG 2>&1
+CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest <test_file>.py -m soft_margin_loss -vs --log-cli-level=DEBUG 2>&1
 ```
 
-**验证算子被调用**：在测试输出中检查是否出现了类似 `GEMS leaky_relu` 的 DEBUG 日志。如果没有出现，说明你的算子没有被正确注册或调用，需要检查 Step 4 的注册步骤。
+**验证算子被调用**：在测试输出中检查是否出现了类似 `GEMS soft_margin_loss` 的 DEBUG 日志。如果没有出现，说明你的算子没有被正确注册或调用，需要检查 Step 4 的注册步骤。
 
 **验证导入正确性**：如果需要确认导入的是 worktree 代码，可以运行：
 ```bash
@@ -195,25 +195,25 @@ CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -c "
 **如果测试失败：**
 1. 分析失败原因（类型不匹配、精度问题、逻辑错误）
 2. 如果 DEBUG 日志中没有 `GEMS` 输出，检查算子注册是否正确
-3. 修复 `src/flag_gems/ops/leaky_relu.py` 或测试代码
+3. 修复 `src/flag_gems/ops/soft_margin_loss.py` 或测试代码
 4. 重新运行测试，直到所有测试通过
 
 ### Step 6: 性能测试
 
-- 性能测试：`./FlagGems/experimental_tests/performance/leaky_relu_test.py`
+- 性能测试：`./FlagGems/experimental_tests/performance/soft_margin_loss_test.py`
 
 运行 benchmark（同样必须在工作目录下）：
 ```bash
 cd ./FlagGems
-CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest experimental_tests/performance/<benchmark_file>.py -m leaky_relu -vs 2>&1
+CUDA_VISIBLE_DEVICES=0 /root/miniconda3/envs/flagscale-inference/bin/python -m pytest experimental_tests/performance/<benchmark_file>.py -m soft_margin_loss -vs 2>&1
 ```
 
 **解析 benchmark 输出**：benchmark 输出格式为：
 ```
-Operator: leaky_relu  Performance Test (dtype=torch.float16, mode=kernel,level=comprehensive)
+Operator: soft_margin_loss  Performance Test (dtype=torch.float16, mode=kernel,level=comprehensive)
 SUCCESS    <torch_latency_ms>    <gems_latency_ms>    <speedup>    <gems_gbps>    [<shape>]
 SUCCESS    ...
-Operator: leaky_relu  Performance Test (dtype=torch.float32, ...)
+Operator: soft_margin_loss  Performance Test (dtype=torch.float32, ...)
 SUCCESS    ...
 ```
 
@@ -225,11 +225,11 @@ SUCCESS    ...
 
 ```json
 {
-  "operator": "leaky_relu",
+  "operator": "soft_margin_loss",
   "status": "success 或 failed",
   "accuracy_passed": true/false,
   "files_created": [
-    "src/flag_gems/ops/leaky_relu.py"
+    "src/flag_gems/ops/soft_margin_loss.py"
   ],
   "files_modified": [
     "src/flag_gems/ops/__init__.py",
@@ -243,10 +243,10 @@ SUCCESS    ...
     "total": 12,
     "passed": 12,
     "failed": 0,
-    "test_command": "python -m pytest tests/test_xxx_ops.py -m leaky_relu -vs"
+    "test_command": "python -m pytest tests/test_xxx_ops.py -m soft_margin_loss -vs"
   },
   "benchmark_results": {
-    "benchmark_command": "python -m pytest benchmark/test_xxx_perf.py -m leaky_relu -vs",
+    "benchmark_command": "python -m pytest benchmark/test_xxx_perf.py -m soft_margin_loss -vs",
     "data": [
       {
         "dtype": "torch.float16",
