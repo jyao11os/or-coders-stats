@@ -30,7 +30,7 @@ while IFS= read -r MODEL; do
     echo ""
     echo "[$i/$TOTAL] Running: openrouter/$MODEL"
     echo "----------------------------------------"
-    if python bench.py --tool "$TOOL" --model "openrouter/$MODEL" --task "$TASK_FILE" --timeout "$TIMEOUT"; then
+    if python3 bench.py --tool "$TOOL" --model "openrouter/$MODEL" --task "$TASK_FILE" --timeout "$TIMEOUT" < /dev/null; then
         echo "[$i/$TOTAL] Done: openrouter/$MODEL"
     else
         echo "[$i/$TOTAL] FAILED: openrouter/$MODEL (exit $?)"
