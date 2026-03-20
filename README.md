@@ -72,6 +72,10 @@ python gen_execution_sequence.py results/20260306_141257_ccr_moonshotai_kimi-k2.
 python gen_execution_sequence.py results/
 ```
 
+## CCR long-context rerouting
+
+CCR's `longContextThreshold` (default 60000 tokens) can trigger mid-session on long tasks and silently switch to `Router.default` — which in some cases resolves to a different model than the one under test. `bench.py` neutralizes this by setting `longContextThreshold` to 10,000,000 in the patched config for each run; the original value is restored afterwards by the `finally` block.
+
 ## CCR model-specific configuration
 
 Some models require transformer overrides in `~/.claude-code-router/config.json`. Known cases:

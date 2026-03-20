@@ -461,6 +461,7 @@ def run_ccr(task: str, provider: str, model: str, output_dir: Path, timeout: int
     orig_config = ccr_read_config()
     patched = json.loads(json.dumps(orig_config))
     patched.setdefault("Router", {})["default"] = f"{provider},{model}"
+    patched.setdefault("Router", {})["longContextThreshold"] = 10_000_000  # prevent mid-run reroute to a different model
     ccr_write_config(patched)
     ccr_restart()
 
