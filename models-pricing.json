@@ -26,6 +26,13 @@
         "cache_write": 3.75
       }
     },
+    "deepseek": {
+      "deepseek-v3.2": {
+        "input": 0.265,
+        "output": 0.4,
+        "cache_read": 0.13
+      }
+    },
     "google": {
       "gemini-3.1-pro-preview": {
         "input": 2,
@@ -51,6 +58,12 @@
         "output": 1.2,
         "cache_read": 0.03,
         "cache_write": 0
+      },
+      "minimax-m2.7": {
+        "input": 0.3,
+        "output": 1.2,
+        "cache_read": 0.06,
+        "cache_write": 0
       }
     },
     "openai": {
@@ -63,6 +76,20 @@
         "input": 1.75,
         "output": 14,
         "cache_read": 0.175
+      }
+    },
+    "stepfun": {
+      "step-3.5-flash": {
+        "input": 0.1,
+        "output": 0.3,
+        "cache_read": 0.02
+      }
+    },
+    "xiaomi": {
+      "mimo-v2-pro": {
+        "input": 1,
+        "output": 3,
+        "cache_read": 0.2
       }
     },
     "z-ai": {
